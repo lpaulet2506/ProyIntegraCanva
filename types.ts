@@ -6,6 +6,11 @@ export interface CanvaData {
   templateId: string;
 }
 
+export interface CanvaCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
 export interface AuthState {
   accessToken: string | null;
   isAuthenticated: boolean;
