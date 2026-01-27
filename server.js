@@ -17,17 +17,18 @@ app.post('/api/canva-token', async (req, res) => {
   try {
     const { code, clientId, clientSecret, redirectUri, codeVerifier } = req.body;
     
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    
+    // Intentamos enviar como JSON que es lo que el error sugiere que prefiere
     const response = await fetch('https://api.canva.com/v1/oauth/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      body: new URLSearchParams({
+      body: JSON.stringify({
         grant_type: 'authorization_code',
         code,
+        client_id: clientId,
+        client_secret: clientSecret,
         redirect_uri: redirectUri,
         code_verifier: codeVerifier,
       }),
@@ -36,6 +37,7 @@ app.post('/api/canva-token', async (req, res) => {
     const data = await response.json();
     
     if (!response.ok) {
+      console.error('Canva API Error:', data);
       return res.status(response.status).json(data);
     }
 
