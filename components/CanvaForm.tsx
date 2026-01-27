@@ -27,9 +27,12 @@ const CanvaForm: React.FC<CanvaFormProps> = ({ onSubmit, isLoading }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
-      <div class="border-b border-slate-100 pb-4 mb-4">
-        <h2 class="text-xl font-bold text-slate-800">Detalles del Documento</h2>
-        <p class="text-sm text-slate-500">Ingresa la información para actualizar tu plantilla de Canva.</p>
+      {/* Fixed: replaced 'class' with 'className' to comply with React props */}
+      <div className="border-b border-slate-100 pb-4 mb-4">
+        {/* Fixed: replaced 'class' with 'className' */}
+        <h2 className="text-xl font-bold text-slate-800">Detalles del Documento</h2>
+        {/* Fixed: replaced 'class' with 'className' */}
+        <p className="text-sm text-slate-500">Ingresa la información para actualizar tu plantilla de Canva.</p>
       </div>
 
       <div className="space-y-4">
@@ -44,7 +47,8 @@ const CanvaForm: React.FC<CanvaFormProps> = ({ onSubmit, isLoading }) => {
             placeholder="Ej: DA..."
             className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
           />
-          <p class="text-[10px] text-slate-400 mt-1 italic">* Necesitas el ID de una Plantilla de Marca (Brand Template)</p>
+          {/* Fixed: replaced 'class' with 'className' */}
+          <p className="text-[10px] text-slate-400 mt-1 italic">* Necesitas el ID de una Plantilla de Marca (Brand Template)</p>
         </div>
 
         <div>
