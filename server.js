@@ -12,91 +12,95 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Log de todas las peticiones entrantes para diagnosticar el 404
+// Log detallado de peticiones para depurar el 404
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log(`[${new Date().toISOString()}] RECIBIDO: ${req.method} ${req.url}`);
   next();
 });
 
-// Endpoint de prueba para verificar que el API Proxy está vivo
+// Endpoint de salud
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Proxy server is running' });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'production'
+  });
 });
 
-// Endpoint Proxy para intercambiar el token de Canva
+// Proxy de Token mejorado
 app.post('/api/canva-token', async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
-  console.log(`[${requestId}] Iniciando intercambio para: ${req.body.clientId}`);
+  console.log(`[${requestId}] Solicitud de intercambio recibida en el Proxy`);
 
   try {
     const { code, clientId, clientSecret, redirectUri, codeVerifier } = req.body;
 
+    // Validación de entrada
     if (!code || !clientId || !clientSecret) {
-      console.error(`[${requestId}] Faltan parámetros requeridos`);
-      return res.status(400).json({ error: 'missing_params', message: 'Faltan datos para el intercambio' });
+      return res.status(400).json({ error: 'missing_data', message: 'Datos incompletos para el intercambio' });
     }
 
-    // Preparamos los parámetros en formato x-www-form-urlencoded
-    const params = new URLSearchParams();
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', redirectUri);
-    params.append('code_verifier', codeVerifier);
-    params.append('client_id', clientId);
-    params.append('client_secret', clientSecret);
+    // Canva es extremadamente sensible al formato. 
+    // Usamos URLSearchParams para asegurar un formato x-www-form-urlencoded perfecto.
+    const bodyParams = new URLSearchParams();
+    bodyParams.append('grant_type', 'authorization_code');
+    bodyParams.append('code', code);
+    bodyParams.append('client_id', clientId);
+    bodyParams.append('client_secret', clientSecret);
+    bodyParams.append('redirect_uri', redirectUri);
+    bodyParams.append('code_verifier', codeVerifier);
 
-    console.log(`[${requestId}] Enviando POST a Canva URL: https://api.canva.com/v1/oauth/token`);
+    // Probamos con el dominio base que suele ser más estable para OAuth2
+    const CANVA_TOKEN_ENDPOINT = 'https://www.canva.com/api/oauth/token';
     
-    const canvaResponse = await fetch('https://api.canva.com/v1/oauth/token', {
+    console.log(`[${requestId}] Llamando a Canva: ${CANVA_TOKEN_ENDPOINT}`);
+
+    const response = await fetch(CANVA_TOKEN_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-        'User-Agent': 'LPP-Integra-App/1.0'
+        'Accept': 'application/json'
       },
-      body: params.toString(),
+      body: bodyParams.toString()
     });
 
-    const status = canvaResponse.status;
-    const responseText = await canvaResponse.text();
-    
-    console.log(`[${requestId}] Respuesta de Canva (Status ${status}):`, responseText);
+    const responseData = await response.text();
+    console.log(`[${requestId}] Canva respondió con Status ${response.status}`);
 
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error(`[${requestId}] Error al parsear JSON de Canva:`, responseText);
-      return res.status(502).json({ error: 'bad_gateway', message: 'Respuesta no válida de Canva', raw: responseText });
+    if (!response.ok) {
+      console.error(`[${requestId}] Error de Canva: ${responseData}`);
+      try {
+        const errorJson = JSON.parse(responseData);
+        return res.status(response.status).json(errorJson);
+      } catch (e) {
+        return res.status(response.status).json({ error: 'canva_raw_error', message: responseData });
+      }
     }
 
-    if (!canvaResponse.ok) {
-      return res.status(status).json(data);
-    }
-
-    console.log(`[${requestId}] ¡Éxito! Token generado.`);
+    const data = JSON.parse(responseData);
     res.json(data);
 
   } catch (error) {
-    console.error(`[${requestId}] Error crítico en Proxy:`, error);
-    res.status(500).json({ 
-      error: 'internal_error', 
-      message: error.message 
-    });
+    console.error(`[${requestId}] Error interno en el Proxy:`, error);
+    res.status(500).json({ error: 'proxy_internal_error', message: error.message });
   }
 });
 
-// Servir archivos estáticos DESPUÉS de las rutas de API
+// Importante: Servir estáticos DESPUÉS de las rutas de API
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Ruta comodín para SPA
+// SPA Fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`=========================================`);
-  console.log(`SERVIDOR LPP INTEGRA INICIADO EN PUERTO ${PORT}`);
-  console.log(`API HEALTH: http://localhost:${PORT}/api/health`);
-  console.log(`=========================================`);
+// Escuchar en 0.0.0.0 es vital para que Render detecte el servicio
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`
+  🚀 SERVIDOR LPP INTEGRA ACTIVO
+  ----------------------------------
+  Puerto: ${PORT}
+  Health: http://0.0.0.0:${PORT}/api/health
+  ----------------------------------
+  `);
 });
