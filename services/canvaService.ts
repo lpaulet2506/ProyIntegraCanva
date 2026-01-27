@@ -50,19 +50,18 @@ export const exchangeToken = async (code: string, credentials: CanvaCredentials)
   const codeVerifier = localStorage.getItem('canva_code_verifier');
   if (!codeVerifier) throw new Error('No se encontró el verificador de código (PKCE)');
 
-  const basicAuth = btoa(`${credentials.clientId}:${credentials.clientSecret}`);
-  
-  const response = await fetch(CANVA_CONFIG.TOKEN_URL, {
+  // Llamamos a nuestro PROPIO servidor para evitar el error de CORS
+  const response = await fetch('/api/canva-token', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${basicAuth}`,
+      'Content-Type': 'application/json',
     },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
+    body: JSON.stringify({
       code,
-      redirect_uri: CANVA_CONFIG.REDIRECT_URI,
-      code_verifier: codeVerifier,
+      clientId: credentials.clientId,
+      clientSecret: credentials.clientSecret,
+      redirectUri: CANVA_CONFIG.REDIRECT_URI,
+      codeVerifier: codeVerifier
     }),
   });
 
@@ -70,7 +69,7 @@ export const exchangeToken = async (code: string, credentials: CanvaCredentials)
 
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.error_description || 'Error al obtener el token de acceso');
+    throw new Error(errorData.error_description || errorData.message || 'Error en el servidor proxy');
   }
 
   const data = await response.json();
