@@ -22,38 +22,39 @@ const App: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [showSettings, setShowSettings] = useState(!credentials.clientId);
 
-  const currentRedirectUri = window.location.origin.replace(/\/$/, '');
-
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
 
-    if (code && !auth.isAuthenticated && credentials.clientId && credentials.clientSecret) {
-      const handleTokenExchange = async () => {
-        setAuth(prev => ({ ...prev, isLoading: true, error: null }));
-        try {
-          const token = await exchangeToken(code, credentials);
-          localStorage.setItem('canva_token', token);
-          setAuth({
-            accessToken: token,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          });
-          // Limpiar URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (err: any) {
-          console.error("Token exchange failed:", err);
-          setAuth(prev => ({ 
-            ...prev, 
-            isLoading: false, 
-            error: `Error de vinculación: ${err.message}` 
-          }));
-          // Si falló, también limpiamos el código de la URL para permitir reintentar
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      };
-      handleTokenExchange();
+    if (code && !auth.isAuthenticated) {
+      // Limpiar URL inmediatamente para evitar re-procesamientos accidentales
+      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+      
+      if (credentials.clientId && credentials.clientSecret) {
+        const handleTokenExchange = async () => {
+          setAuth(prev => ({ ...prev, isLoading: true, error: null }));
+          try {
+            const token = await exchangeToken(code, credentials);
+            localStorage.setItem('canva_token', token);
+            setAuth({
+              accessToken: token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+          } catch (err: any) {
+            console.error("Fallo en el intercambio:", err);
+            setAuth(prev => ({ 
+              ...prev, 
+              isLoading: false, 
+              error: `Fallo de vinculación: ${err.message}. Revisa que el Client Secret y el ID sean correctos en la configuración.` 
+            }));
+          }
+        };
+        handleTokenExchange();
+      } else {
+        setAuth(prev => ({ ...prev, error: "Faltan credenciales para completar la vinculación." }));
+      }
     }
   }, [credentials, auth.isAuthenticated]);
 
@@ -61,9 +62,8 @@ const App: React.FC = () => {
     e.preventDefault();
     localStorage.setItem('canva_creds', JSON.stringify(credentials));
     setShowSettings(false);
-    // Forzar limpieza de sesión previa si se cambian credenciales
     localStorage.removeItem('canva_token');
-    setAuth(prev => ({ ...prev, isAuthenticated: false, accessToken: null }));
+    setAuth(prev => ({ ...prev, isAuthenticated: false, accessToken: null, error: null }));
   };
 
   const handleCanvaSubmit = async (data: CanvaData) => {
@@ -101,6 +101,8 @@ const App: React.FC = () => {
     setAuth({ accessToken: null, isAuthenticated: false, isLoading: false, error: null });
   };
 
+  const currentRedirectUri = window.location.origin.replace(/\/$/, '');
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-12 px-4 font-sans">
       <div className="max-w-2xl w-full">
@@ -123,16 +125,22 @@ const App: React.FC = () => {
             <div className="bg-white p-6 rounded-2xl shadow-xl border border-blue-100 mb-8 animate-in slide-in-from-top duration-300">
               <h3 className="font-bold text-slate-800 mb-4">Credenciales de Canva</h3>
               <form onSubmit={saveCredentials} className="space-y-4">
-                <input type="text" value={credentials.clientId} onChange={e => setCredentials({...credentials, clientId: e.target.value})} placeholder="Client ID (OC-...)" className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
-                <input type="password" value={credentials.clientSecret} onChange={e => setCredentials({...credentials, clientSecret: e.target.value})} placeholder="Client Secret" className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
-                <button type="submit" className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900">Guardar Credenciales</button>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-1">CLIENT ID</label>
+                  <input type="text" value={credentials.clientId} onChange={e => setCredentials({...credentials, clientId: e.target.value.trim()})} placeholder="OC-..." className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-1">CLIENT SECRET</label>
+                  <input type="password" value={credentials.clientSecret} onChange={e => setCredentials({...credentials, clientSecret: e.target.value.trim()})} placeholder="••••••••••••" className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                </div>
+                <button type="submit" className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-all active:scale-95">Actualizar y Reiniciar Sesión</button>
               </form>
             </div>
           )}
         </div>
 
         {auth.error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-xl">
+          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r-xl shadow-sm animate-pulse">
             <p className="font-bold text-sm">Aviso:</p>
             <p className="text-xs">{auth.error}</p>
           </div>
@@ -143,39 +151,60 @@ const App: React.FC = () => {
             <div className="flex justify-center mb-4">
               <svg className="animate-spin h-10 w-10 text-blue-600" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
             </div>
-            <h3 className="text-xl font-bold">Autenticando...</h3>
+            <h3 className="text-xl font-bold text-slate-800">Vinculando con Canva...</h3>
+            <p className="text-sm text-slate-400 mt-2">Estamos intercambiando el código por un token seguro.</p>
           </div>
         ) : !auth.isAuthenticated ? (
-          <div className="bg-white p-10 rounded-3xl shadow-2xl text-center">
-            <h3 className="text-2xl font-bold mb-4">Conectar con Canva</h3>
-            <button onClick={() => initiateAuth(credentials)} disabled={!credentials.clientId} className={`w-full py-4 text-lg font-bold rounded-2xl text-white shadow-xl ${!credentials.clientId ? 'bg-slate-300' : 'bg-blue-600 hover:bg-blue-700'}`}>
-              Autorizar Aplicación
+          <div className="bg-white p-10 rounded-3xl shadow-2xl text-center border border-slate-100">
+            <h3 className="text-2xl font-bold mb-4 text-slate-800">Conectar con Canva</h3>
+            <p className="text-sm text-slate-500 mb-8">Necesitas autorizar a LPP Integra para acceder a tus plantillas de marca.</p>
+            <button 
+              onClick={() => initiateAuth(credentials)} 
+              disabled={!credentials.clientId || !credentials.clientSecret} 
+              className={`w-full py-4 text-lg font-bold rounded-2xl text-white shadow-xl transition-all active:scale-95 ${(!credentials.clientId || !credentials.clientSecret) ? 'bg-slate-300' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'}`}
+            >
+              Autorizar ahora
             </button>
           </div>
         ) : (
-          <div className="space-y-8">
-            <div className="flex justify-between items-center bg-white px-6 py-3 rounded-2xl shadow-sm">
-              <span className="text-xs font-bold text-green-600">● Conectado con Canva</span>
-              <button onClick={logout} className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest">Cerrar Sesión</button>
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex justify-between items-center bg-white px-6 py-4 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center space-x-2">
+                <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Canva Conectado</span>
+              </div>
+              <button onClick={logout} className="text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest">Desconectar</button>
             </div>
             <CanvaForm onSubmit={handleCanvaSubmit} isLoading={processing} />
             {jobStatus && (
-              <div className={`p-8 rounded-3xl border-2 shadow-xl ${jobStatus.status === 'COMPLETED' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-                <h4 className="text-sm font-black mb-2">Estado: {jobStatus.status}</h4>
+              <div className={`p-8 rounded-3xl border-2 shadow-xl animate-in zoom-in duration-300 ${jobStatus.status === 'COMPLETED' ? 'bg-green-50 border-green-200 shadow-green-100' : 'bg-blue-50 border-blue-200 shadow-blue-100'}`}>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className={`p-2 rounded-lg ${jobStatus.status === 'COMPLETED' ? 'bg-green-500' : 'bg-blue-500'} text-white`}>
+                    {jobStatus.status === 'COMPLETED' ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                    ) : (
+                      <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    )}
+                  </div>
+                  <h4 className="font-black text-slate-800 tracking-tight">Estado de Generación: {jobStatus.status}</h4>
+                </div>
                 {jobStatus.resultUrl && (
-                  <a href={jobStatus.resultUrl} target="_blank" rel="noopener noreferrer" className="block w-full text-center py-4 bg-green-600 text-white font-bold rounded-2xl">Abrir Documento 🚀</a>
+                  <a href={jobStatus.resultUrl} target="_blank" rel="noopener noreferrer" className="block w-full text-center py-5 bg-green-600 text-white font-black rounded-2xl hover:bg-green-700 shadow-lg shadow-green-200 transition-all hover:-translate-y-1">
+                    ABRIR EN CANVA 🚀
+                  </a>
                 )}
               </div>
             )}
           </div>
         )}
 
-        <div className="mt-12 p-6 bg-slate-900 rounded-2xl">
-          <p className="text-[10px] font-bold text-blue-400 mb-3">REDIRIGIR URL PARA CANVA</p>
-          <div className="flex items-center space-x-2">
-            <code className="flex-1 bg-black/40 p-2.5 rounded-lg text-[11px] text-slate-300 overflow-hidden">{currentRedirectUri}</code>
-            <button onClick={() => {navigator.clipboard.writeText(currentRedirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000);}} className="text-[10px] font-bold py-2 px-4 rounded-lg bg-slate-700 text-white">
-              {copied ? '¡Copiado!' : 'Copiar'}
+        <div className="mt-12 p-6 bg-slate-900 rounded-3xl shadow-2xl">
+          <p className="text-[10px] font-black text-blue-400 mb-3 tracking-[0.2em] uppercase">Configuración requerida en Canva</p>
+          <p className="text-[11px] text-slate-400 mb-4">Asegúrate de que esta URL esté en "Redirect URLs" dentro de tu App en Canva Developers:</p>
+          <div className="flex items-center space-x-2 bg-black/40 p-2 rounded-xl border border-slate-700">
+            <code className="flex-1 px-2 text-[11px] text-blue-200 font-mono overflow-hidden whitespace-nowrap">{currentRedirectUri}</code>
+            <button onClick={() => {navigator.clipboard.writeText(currentRedirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000);}} className="text-[10px] font-black py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-all uppercase">
+              {copied ? 'Listo' : 'Copiar'}
             </button>
           </div>
         </div>
