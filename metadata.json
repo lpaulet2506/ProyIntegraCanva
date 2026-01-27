@@ -1,0 +1,8 @@
+{
+  "name": "Canva Magic Automator",
+  "description": "A streamlined tool to inject custom data (Name, Amount, Address) into Canva templates using the Canva Connect API.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
