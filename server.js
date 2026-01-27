@@ -6,101 +6,109 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+
+// Render automatically provides the PORT environment variable.
 const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Log detallado de peticiones para depurar el 404
+// Debug middleware to log all incoming requests to the console
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] RECIBIDO: ${req.method} ${req.url}`);
+  console.log(`[${new Date().toISOString()}] Incoming: ${req.method} ${req.url}`);
   next();
 });
 
-// Endpoint de salud
+// Health check endpoint to verify the server is responding
 app.get('/api/health', (req, res) => {
-  res.json({ 
+  res.status(200).json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production'
+    port: PORT
   });
 });
 
-// Proxy de Token mejorado
+// Proxy for Canva OAuth2 Token Exchange
 app.post('/api/canva-token', async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
-  console.log(`[${requestId}] Solicitud de intercambio recibida en el Proxy`);
+  console.log(`[${requestId}] Starting token exchange proxy...`);
 
   try {
     const { code, clientId, clientSecret, redirectUri, codeVerifier } = req.body;
 
-    // Validación de entrada
-    if (!code || !clientId || !clientSecret) {
-      return res.status(400).json({ error: 'missing_data', message: 'Datos incompletos para el intercambio' });
+    if (!code || !clientId || !clientSecret || !redirectUri || !codeVerifier) {
+      console.warn(`[${requestId}] Missing parameters in request body`);
+      return res.status(400).json({ error: 'invalid_request', message: 'Missing required parameters for token exchange.' });
     }
 
-    // Canva es extremadamente sensible al formato. 
-    // Usamos URLSearchParams para asegurar un formato x-www-form-urlencoded perfecto.
-    const bodyParams = new URLSearchParams();
-    bodyParams.append('grant_type', 'authorization_code');
-    bodyParams.append('code', code);
-    bodyParams.append('client_id', clientId);
-    bodyParams.append('client_secret', clientSecret);
-    bodyParams.append('redirect_uri', redirectUri);
-    bodyParams.append('code_verifier', codeVerifier);
+    // According to Canva Connect API docs, the body must be x-www-form-urlencoded
+    const params = new URLSearchParams();
+    params.append('grant_type', 'authorization_code');
+    params.append('code', code);
+    params.append('client_id', clientId);
+    params.append('client_secret', clientSecret);
+    params.append('redirect_uri', redirectUri);
+    params.append('code_verifier', codeVerifier);
 
-    // Probamos con el dominio base que suele ser más estable para OAuth2
-    const CANVA_TOKEN_ENDPOINT = 'https://www.canva.com/api/oauth/token';
+    // Using the official Connect API endpoint
+    const CANVA_TOKEN_URL = 'https://api.canva.com/v1/oauth/token';
     
-    console.log(`[${requestId}] Llamando a Canva: ${CANVA_TOKEN_ENDPOINT}`);
+    console.log(`[${requestId}] POST to: ${CANVA_TOKEN_URL}`);
+    console.log(`[${requestId}] ClientID: ${clientId}`);
 
-    const response = await fetch(CANVA_TOKEN_ENDPOINT, {
+    const canvaResponse = await fetch(CANVA_TOKEN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': 'LPP-Integra-App/1.0'
       },
-      body: bodyParams.toString()
+      body: params.toString(),
     });
 
-    const responseData = await response.text();
-    console.log(`[${requestId}] Canva respondió con Status ${response.status}`);
-
-    if (!response.ok) {
-      console.error(`[${requestId}] Error de Canva: ${responseData}`);
-      try {
-        const errorJson = JSON.parse(responseData);
-        return res.status(response.status).json(errorJson);
-      } catch (e) {
-        return res.status(response.status).json({ error: 'canva_raw_error', message: responseData });
-      }
+    const status = canvaResponse.status;
+    const responseBody = await canvaResponse.text();
+    
+    console.log(`[${requestId}] Canva Status: ${status}`);
+    
+    let data;
+    try {
+      data = JSON.parse(responseBody);
+    } catch (e) {
+      console.error(`[${requestId}] Non-JSON response from Canva:`, responseBody);
+      return res.status(502).json({ error: 'bad_gateway', message: 'Received non-JSON response from Canva.', raw: responseBody });
     }
 
-    const data = JSON.parse(responseData);
+    if (!canvaResponse.ok) {
+      console.error(`[${requestId}] Canva Error Detail:`, data);
+      return res.status(status).json(data);
+    }
+
+    console.log(`[${requestId}] Token exchange successful.`);
     res.json(data);
 
   } catch (error) {
-    console.error(`[${requestId}] Error interno en el Proxy:`, error);
-    res.status(500).json({ error: 'proxy_internal_error', message: error.message });
+    console.error(`[${requestId}] Proxy Internal Error:`, error);
+    res.status(500).json({ error: 'internal_server_error', message: error.message });
   }
 });
 
-// Importante: Servir estáticos DESPUÉS de las rutas de API
-app.use(express.static(path.join(__dirname, 'dist')));
+// STATIC FILES: Serve from 'dist' folder generated by Vite
+// We use path.resolve to ensure the path is correct regardless of where the script is run from
+const distPath = path.resolve(__dirname, 'dist');
+app.use(express.static(distPath));
 
-// SPA Fallback
+// SPA FALLBACK: Route all non-API requests to index.html
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// Escuchar en 0.0.0.0 es vital para que Render detecte el servicio
+// Start the server listening on all interfaces (0.0.0.0)
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-  🚀 SERVIDOR LPP INTEGRA ACTIVO
-  ----------------------------------
-  Puerto: ${PORT}
-  Health: http://0.0.0.0:${PORT}/api/health
-  ----------------------------------
-  `);
+  console.log('==============================================');
+  console.log(`  SERVER STARTED SUCCESSFULLY`);
+  console.log(`  Port: ${PORT}`);
+  console.log(`  Health Check: /api/health`);
+  console.log('==============================================');
 });
