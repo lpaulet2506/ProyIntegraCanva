@@ -48,32 +48,44 @@ export const initiateAuth = async (credentials: CanvaCredentials) => {
 
 export const exchangeToken = async (code: string, credentials: CanvaCredentials): Promise<string> => {
   const codeVerifier = localStorage.getItem('canva_code_verifier');
-  if (!codeVerifier) throw new Error('No se encontró el verificador de código (PKCE)');
+  if (!codeVerifier) throw new Error('No se encontró el verificador de código (PKCE). Intenta autorizar de nuevo.');
 
-  // Llamamos a nuestro PROPIO servidor para evitar el error de CORS
-  const response = await fetch('/api/canva-token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      code,
-      clientId: credentials.clientId,
-      clientSecret: credentials.clientSecret,
-      redirectUri: CANVA_CONFIG.REDIRECT_URI,
-      codeVerifier: codeVerifier
-    }),
-  });
+  const targetUrl = `${window.location.origin}/api/canva-token`;
+  console.log("Llamando al Proxy en:", targetUrl);
 
-  localStorage.removeItem('canva_code_verifier');
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        code,
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        redirectUri: CANVA_CONFIG.REDIRECT_URI,
+        codeVerifier: codeVerifier
+      }),
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error_description || errorData.message || 'Error en el servidor proxy');
+    localStorage.removeItem('canva_code_verifier');
+
+    if (!response.ok) {
+      let errorInfo;
+      try {
+        errorInfo = await response.json();
+      } catch (e) {
+        throw new Error(`Error HTTP ${response.status}: El servidor no respondió con JSON válido.`);
+      }
+      throw new Error(errorInfo.message || errorInfo.error || `Error ${response.status} en el Proxy`);
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  } catch (err: any) {
+    console.error("Error en fetch de intercambio:", err);
+    throw err;
   }
-
-  const data = await response.json();
-  return data.access_token;
 };
 
 export const runAutofill = async (token: string, data: CanvaData): Promise<AutofillResult> => {
