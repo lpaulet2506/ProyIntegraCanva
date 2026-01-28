@@ -35,7 +35,7 @@ export const initiateAuth = async (credentials: CanvaCredentials) => {
 
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: credentials.clientId,
+    client_id: credentials.clientId.trim(),
     redirect_uri: CANVA_CONFIG.REDIRECT_URI,
     scope: SCOPES,
     code_challenge: codeChallenge,
@@ -48,42 +48,40 @@ export const initiateAuth = async (credentials: CanvaCredentials) => {
 
 export const exchangeToken = async (code: string, credentials: CanvaCredentials): Promise<string> => {
   const codeVerifier = localStorage.getItem('canva_code_verifier');
-  if (!codeVerifier) throw new Error('No se encontró el verificador de código (PKCE). Intenta autorizar de nuevo.');
+  if (!codeVerifier) throw new Error('No se encontró el PKCE (code_verifier).');
 
   const targetUrl = `${window.location.origin}/api/canva-token`;
-  console.log("Llamando al Proxy en:", targetUrl);
 
   try {
     const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         code,
-        clientId: credentials.clientId,
-        clientSecret: credentials.clientSecret,
+        clientId: credentials.clientId.trim(),
+        clientSecret: credentials.clientSecret.trim(),
         redirectUri: CANVA_CONFIG.REDIRECT_URI,
         codeVerifier: codeVerifier
       }),
     });
-
-    localStorage.removeItem('canva_code_verifier');
 
     if (!response.ok) {
       let errorInfo;
       try {
         errorInfo = await response.json();
       } catch (e) {
-        throw new Error(`Error HTTP ${response.status}: El servidor no respondió con JSON válido.`);
+        throw new Error(`Error ${response.status}: El servidor no respondió con JSON.`);
       }
-      throw new Error(errorInfo.message || errorInfo.error || `Error ${response.status} en el Proxy`);
+      // Limpiamos el verifier solo si no es un error de parámetros
+      localStorage.removeItem('canva_code_verifier');
+      throw new Error(errorInfo.message || errorInfo.error || `Error ${response.status}`);
     }
 
+    localStorage.removeItem('canva_code_verifier');
     const data = await response.json();
     return data.access_token;
   } catch (err: any) {
-    console.error("Error en fetch de intercambio:", err);
+    console.error("Error en intercambio:", err);
     throw err;
   }
 };
@@ -120,9 +118,7 @@ export const runAutofill = async (token: string, data: CanvaData): Promise<Autof
 
 export const checkJobStatus = async (token: string, jobId: string): Promise<AutofillResult> => {
   const response = await fetch(`${CANVA_CONFIG.AUTOFILL_URL}/${jobId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: { 'Authorization': `Bearer ${token}` },
   });
 
   if (!response.ok) throw new Error('Fallo al consultar estado');

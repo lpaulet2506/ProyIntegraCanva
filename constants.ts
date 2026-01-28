@@ -9,8 +9,11 @@ export const CANVA_CONFIG = {
   AUTOFILL_URL: 'https://api.canva.com/v1/autofill',
 };
 
+// Se agregaron los scopes necesarios para Autofill según la documentación oficial
+// 'brand_template:content:read' es vital para acceder a las plantillas de marca.
 export const SCOPES = [
   'design:content:read',
   'design:content:write',
-  'design:meta:read'
+  'design:meta:read',
+  'brand_template:content:read'
 ].join(' ');
