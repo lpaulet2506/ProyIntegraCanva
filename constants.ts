@@ -9,11 +9,10 @@ export const CANVA_CONFIG = {
   AUTOFILL_URL: 'https://api.canva.com/v1/autofill',
 };
 
-// Se agregaron los scopes necesarios para Autofill según la documentación oficial
-// 'brand_template:content:read' es vital para acceder a las plantillas de marca.
+// Se redujeron los scopes al mínimo indispensable que suele estar permitido sin aprobaciones especiales.
+// El error 'invalid_scope' indica que uno de los scopes solicitados no está permitido para este Client ID.
+// Una vez que la app sea aprobada o si se habilitan más permisos, se pueden reincorporar.
 export const SCOPES = [
   'design:content:read',
-  'design:content:write',
-  'design:meta:read',
-  'brand_template:content:read'
+  'design:content:write'
 ].join(' ');

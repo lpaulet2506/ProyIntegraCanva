@@ -43,6 +43,21 @@ const App: React.FC = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
+    const error = urlParams.get('error');
+    const errorDesc = urlParams.get('error_description');
+
+    // Manejo de errores que vienen en la URL (ej: invalid_scope)
+    if (error) {
+      setAuth(prev => ({ 
+        ...prev, 
+        isLoading: false,
+        error: `Error de Canva: ${error}. ${errorDesc || ''}` 
+      }));
+      setDebugInfo(`Canva rechazó la petición de autorización: ${error}`);
+      // Limpiar la URL para evitar procesar el error múltiples veces
+      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+      return;
+    }
 
     if (code && !auth.isAuthenticated) {
       window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
@@ -50,7 +65,7 @@ const App: React.FC = () => {
       if (credentials.clientId && credentials.clientSecret) {
         const handleTokenExchange = async () => {
           setAuth(prev => ({ ...prev, isLoading: true, error: null }));
-          setDebugInfo('Iniciando comunicación con el servidor proxy...');
+          setDebugInfo('Iniciando intercambio de token...');
           try {
             const token = await exchangeToken(code, credentials);
             localStorage.setItem('canva_token', token);
@@ -60,20 +75,18 @@ const App: React.FC = () => {
               isLoading: false,
               error: null,
             });
-            setDebugInfo('¡Conexión exitosa!');
+            setDebugInfo('¡Autenticación completada con éxito!');
           } catch (err: any) {
             console.error("Detalle del error:", err);
             setAuth(prev => ({ 
               ...prev, 
               isLoading: false, 
-              error: `Error de Vinculación: ${err.message}. Verifica los logs de Render para más detalle.` 
+              error: `Fallo en intercambio: ${err.message}` 
             }));
-            setDebugInfo(`Error crítico: ${err.message}`);
+            setDebugInfo(`Error: ${err.message}`);
           }
         };
         handleTokenExchange();
-      } else {
-        setAuth(prev => ({ ...prev, error: "Configura las credenciales en la sección de arriba." }));
       }
     }
   }, [credentials, auth.isAuthenticated]);
@@ -82,25 +95,28 @@ const App: React.FC = () => {
     if (!auth.accessToken) return;
     setProcessing(true);
     setJobStatus(null);
-    setDebugInfo('Enviando datos a Canva...');
+    setDebugInfo('Iniciando proceso de Autofill en Canva...');
 
     try {
       let result = await runAutofill(auth.accessToken, data);
       setJobStatus(result);
-      setDebugInfo(`Trabajo iniciado (ID: ${result.jobId}). Esperando finalización...`);
+      setDebugInfo(`Trabajo de generación iniciado...`);
 
       while (result.status === 'IN_PROGRESS') {
-        await new Promise(r => setTimeout(r, 2500));
+        await new Promise(r => setTimeout(r, 2000));
         result = await checkJobStatus(auth.accessToken, result.jobId);
         setJobStatus(result);
-        setDebugInfo(`Estado actual: ${result.status}`);
+        setDebugInfo(`Progreso: ${result.status}`);
       }
 
-      if (result.status === 'COMPLETED') setDebugInfo('¡Documento generado con éxito!');
-      else throw new Error('Canva reportó un fallo en la generación.');
+      if (result.status === 'COMPLETED') {
+        setDebugInfo('¡Documento generado con éxito!');
+      } else {
+        throw new Error('La generación falló en los servidores de Canva.');
+      }
 
     } catch (err: any) {
-      setAuth(prev => ({ ...prev, error: `Error en proceso: ${err.message}` }));
+      setAuth(prev => ({ ...prev, error: `Error en Autofill: ${err.message}. Asegúrate de que el ID de plantilla sea de una "Plantilla de Marca" (Brand Template) válida.` }));
       setDebugInfo(`Fallo: ${err.message}`);
     } finally {
       setProcessing(false);
@@ -140,7 +156,7 @@ const App: React.FC = () => {
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${serverStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-              <span>SERVIDOR: {serverStatus === 'online' ? 'EN LÍNEA' : serverStatus === 'offline' ? 'DESCONECTADO (404)' : 'VERIFICANDO...'}</span>
+              <span>SERVIDOR: {serverStatus === 'online' ? 'EN LÍNEA' : serverStatus === 'offline' ? 'DESCONECTADO' : 'VERIFICANDO...'}</span>
             </button>
           </div>
         </header>
