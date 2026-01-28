@@ -9,10 +9,26 @@ export const CANVA_CONFIG = {
   AUTOFILL_URL: 'https://api.canva.com/v1/autofill',
 };
 
-// Se redujeron los scopes al mínimo indispensable que suele estar permitido sin aprobaciones especiales.
-// El error 'invalid_scope' indica que uno de los scopes solicitados no está permitido para este Client ID.
-// Una vez que la app sea aprobada o si se habilitan más permisos, se pueden reincorporar.
+/**
+ * Scopes obtenidos del modelo de la segunda aplicación de prueba del usuario.
+ * Nota: Se utiliza la nomenclatura exacta de la URL proporcionada (ej: 'brandtemplate' en lugar de 'brand_template')
+ */
 export const SCOPES = [
+  'folder:permission:write',
+  'comment:read',
+  'folder:write',
+  'asset:write',
+  'comment:write',
+  'design:content:write',
+  'design:permission:write',
+  'asset:read',
+  'app:write',
+  'folder:permission:read',
+  'brandtemplate:content:read',
+  'brandtemplate:meta:read',
+  'folder:read',
   'design:content:read',
-  'design:content:write'
+  'design:permission:read',
+  'profile:read',
+  'app:read'
 ].join(' ');
