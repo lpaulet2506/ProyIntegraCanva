@@ -25,71 +25,71 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/canva-token', async (req, res) => {
   const requestId = Math.random().toString(36).substring(7);
-  console.log(`[${requestId}] Intercambiando código por token (JSON Mode)...`);
+  console.log(`[${requestId}] Iniciando intercambio de token en servidor de identidad...`);
 
   try {
     const { code, clientId, clientSecret, redirectUri, codeVerifier } = req.body;
 
     if (!code || !clientId || !clientSecret || !redirectUri || !codeVerifier) {
-      console.error(`[${requestId}] Error: Faltan parámetros en la petición.`);
-      return res.status(400).json({ error: 'missing_parameters', message: 'Faltan datos obligatorios.' });
+      console.error(`[${requestId}] Error: Faltan parámetros requeridos.`);
+      return res.status(400).json({ error: 'missing_parameters', message: 'Faltan datos obligatorios para el intercambio.' });
     }
 
-    // 1. Generar Basic Auth Header
-    const authHeader = `Basic ${Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64')}`;
+    // IMPORTANTE: Para OAuth2 en Canva, el host de identidad es www.canva.com
+    // mientras que el host de API para datos es api.canva.com
+    const CANVA_AUTH_TOKEN_URL = 'https://www.canva.com/api/oauth/token';
     
-    const CANVA_TOKEN_URL = 'https://api.canva.com/v1/oauth/token';
-    
-    console.log(`[${requestId}] POST ${CANVA_TOKEN_URL} with JSON body`);
-    
-    // 2. Enviar petición como JSON (Requisito de Connect API v1)
-    const response = await fetch(CANVA_TOKEN_URL, {
+    // Preparar el cuerpo en formato x-www-form-urlencoded (Estándar OAuth2)
+    const params = new URLSearchParams();
+    params.append('grant_type', 'authorization_code');
+    params.append('code', code);
+    params.append('redirect_uri', redirectUri);
+    params.append('code_verifier', codeVerifier);
+    params.append('client_id', clientId.trim());
+    params.append('client_secret', clientSecret.trim());
+
+    console.log(`[${requestId}] POST ${CANVA_AUTH_TOKEN_URL}`);
+
+    const response = await fetch(CANVA_AUTH_TOKEN_URL, {
       method: 'POST',
       headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-        'User-Agent': 'CanvaConnectAPI-LPPIntegra/1.0',
+        'User-Agent': 'LPPIntegra-Automator/1.0'
       },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code: code,
-        redirect_uri: redirectUri,
-        code_verifier: codeVerifier,
-      }),
+      body: params.toString(),
     });
 
     const responseStatus = response.status;
     const responseText = await response.text();
     
-    console.log(`[${requestId}] Respuesta de Canva (Status ${responseStatus})`);
+    console.log(`[${requestId}] Respuesta de Canva Auth (Status ${responseStatus})`);
 
     let data;
     try {
       data = JSON.parse(responseText);
     } catch (e) {
-      console.error(`[${requestId}] Canva no devolvió JSON. Respuesta bruta:`, responseText.substring(0, 250));
+      console.error(`[${requestId}] Error al parsear JSON de Canva:`, responseText.substring(0, 200));
       return res.status(responseStatus || 502).json({ 
-        error: 'invalid_canva_response', 
-        message: `Canva devolvió un error (Status ${responseStatus}).`,
-        details: responseText.substring(0, 100)
+        error: 'invalid_auth_response', 
+        message: 'El servidor de autenticación de Canva no respondió correctamente.' 
       });
     }
 
     if (!response.ok) {
-      console.error(`[${requestId}] Error detallado de Canva:`, data);
+      console.error(`[${requestId}] Error devuelto por Canva:`, data);
       return res.status(responseStatus).json({
         ...data,
-        message: data.error_description || data.message || `Error de Canva: ${data.error || responseStatus}`
+        message: data.error_description || data.message || `Error de autorización: ${data.error}`
       });
     }
 
-    console.log(`[${requestId}] Éxito: Token obtenido.`);
+    console.log(`[${requestId}] Éxito: Access Token recibido.`);
     res.json(data);
 
   } catch (error) {
-    console.error(`[${requestId}] Error crítico en el Proxy:`, error);
-    res.status(500).json({ error: 'proxy_internal_error', message: error.message });
+    console.error(`[${requestId}] Error crítico en el Proxy de Identidad:`, error);
+    res.status(500).json({ error: 'internal_server_error', message: error.message });
   }
 });
 
@@ -101,5 +101,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor activo en puerto ${PORT}`);
+  console.log(`Servidor de Integración listo en puerto ${PORT}`);
 });
