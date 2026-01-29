@@ -1,17 +1,14 @@
 
 export const CANVA_CONFIG = {
-  // Las credenciales ahora son dinámicas y las ingresa el usuario
   get REDIRECT_URI() {
+    // Aseguramos que no haya barra diagonal al final
     return window.location.origin.replace(/\/$/, '');
   },
   AUTH_URL: 'https://www.canva.com/api/oauth/authorize',
-  TOKEN_URL: 'https://www.canva.com/api/oauth/token', // Actualizado a www.canva.com
-  AUTOFILL_URL: 'https://api.canva.com/v1/autofill',    // Se mantiene api.canva.com para datos
+  TOKEN_URL: 'https://api.canva.com/v1/oauth/token',
+  AUTOFILL_URL: 'https://api.canva.com/v1/autofill',
 };
 
-/**
- * Scopes obtenidos del modelo de la segunda aplicación de prueba del usuario.
- */
 export const SCOPES = [
   'folder:permission:write',
   'comment:read',
