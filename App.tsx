@@ -46,18 +46,18 @@ const App: React.FC = () => {
     const error = urlParams.get('error');
 
     if (error) {
-      setAuth(prev => ({ ...prev, error: `Canva: ${error}` }));
-      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+      setAuth(prev => ({ ...prev, error: `Canva Error: ${error}` }));
+      window.history.replaceState({}, document.title, "/");
       return;
     }
 
-    if (code && !auth.isAuthenticated) {
-      // Limpiar URL inmediatamente para evitar dobles peticiones
-      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+    if (code && !auth.isAuthenticated && !auth.isLoading) {
+      // Limpiamos la URL inmediatamente para evitar que un refresh intente usar el mismo código
+      window.history.replaceState({}, document.title, "/");
       
       const handleTokenExchange = async () => {
         setAuth(prev => ({ ...prev, isLoading: true, error: null }));
-        setDebugInfo('Intercambiando código por token (Modo JSON)...');
+        setDebugInfo('Validando conexión con Canva...');
         try {
           const token = await exchangeToken(code, credentials);
           localStorage.setItem('canva_token', token);
@@ -67,45 +67,45 @@ const App: React.FC = () => {
             isLoading: false,
             error: null,
           });
-          setDebugInfo('¡Conexión establecida!');
+          setDebugInfo('¡Conexión lista para usar!');
         } catch (err: any) {
           setAuth(prev => ({ 
             ...prev, 
             isLoading: false, 
-            error: `Error de Token: ${err.message}` 
+            error: err.message 
           }));
-          setDebugInfo(`Fallo: ${err.message}`);
+          setDebugInfo(`Error en vinculación: ${err.message}`);
         }
       };
       handleTokenExchange();
     }
-  }, [credentials, auth.isAuthenticated]);
+  }, [credentials, auth.isAuthenticated, auth.isLoading]);
 
   const handleCanvaSubmit = async (data: CanvaData) => {
     if (!auth.accessToken) return;
     setProcessing(true);
     setJobStatus(null);
-    setDebugInfo('Enviando datos a Canva...');
+    setDebugInfo('Generando documento en Canva...');
 
     try {
       let result = await runAutofill(auth.accessToken, data);
       setJobStatus(result);
 
       while (result.status === 'IN_PROGRESS') {
-        setDebugInfo(`Canva está trabajando... (${result.status})`);
-        await new Promise(r => setTimeout(r, 2000));
+        setDebugInfo(`Procesando diseño... Estado: ${result.status}`);
+        await new Promise(r => setTimeout(r, 2500));
         result = await checkJobStatus(auth.accessToken, result.jobId);
         setJobStatus(result);
       }
 
       if (result.status === 'COMPLETED') {
-        setDebugInfo('¡Proceso completado con éxito!');
+        setDebugInfo('¡Documento generado correctamente!');
       } else {
-        throw new Error('Canva no pudo generar el diseño.');
+        throw new Error('Canva reportó un fallo en la generación.');
       }
     } catch (err: any) {
       setAuth(prev => ({ ...prev, error: err.message }));
-      setDebugInfo(`Error: ${err.message}`);
+      setDebugInfo(`Fallo: ${err.message}`);
     } finally {
       setProcessing(false);
     }
@@ -116,143 +116,148 @@ const App: React.FC = () => {
     localStorage.setItem('canva_creds', JSON.stringify(credentials));
     setShowSettings(false);
     logout();
+    setDebugInfo('Credenciales guardadas. Por favor, conecta de nuevo.');
   };
 
   const logout = () => {
     localStorage.removeItem('canva_token');
     setAuth({ accessToken: null, isAuthenticated: false, isLoading: false, error: null });
-    setDebugInfo('');
     setJobStatus(null);
   };
 
-  // Obtenemos la URL de redirección configurada con el endpoint /callback
   const currentRedirectUri = CANVA_CONFIG.REDIRECT_URI;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4 font-sans">
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center py-10 px-4">
       <div className="max-w-xl w-full">
         <header className="text-center mb-8">
-          <div className="bg-blue-600 text-white inline-block px-4 py-1 rounded-full text-[10px] font-black tracking-widest mb-2 uppercase">LPP Integra</div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Canva Automator</h1>
-          
-          <div className="mt-4 flex justify-center">
-            <button onClick={checkHealth} className="text-[10px] font-bold px-3 py-1 rounded-full border bg-white flex items-center space-x-2">
-              <span className={`w-1.5 h-1.5 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              <span className="text-slate-500 uppercase">Servidor Proxy: {serverStatus || '...'}</span>
-            </button>
-          </div>
+          <div className="bg-indigo-600 text-white inline-block px-3 py-1 rounded-md text-[10px] font-bold tracking-widest mb-3 uppercase">LPP Integra</div>
+          <h1 className="text-3xl font-black text-slate-900">Canva Automator</h1>
+          <p className="text-slate-500 text-sm mt-1">Inyecta datos en tus plantillas automáticamente</p>
         </header>
 
-        {/* Debug Log */}
-        <div className="mb-6 bg-slate-900 p-4 rounded-xl font-mono text-[10px] text-blue-400 border border-slate-800 shadow-lg">
-          <div className="flex justify-between border-b border-slate-800 pb-2 mb-2">
-            <span className="text-slate-500 font-bold uppercase tracking-widest">Estado de Integración</span>
-            <span className="text-slate-700">v1.1.0</span>
-          </div>
-          <p className="flex items-start">
-            <span className="mr-2 text-slate-600">INF:</span> 
-            <span>{debugInfo || 'Esperando acción...'}</span>
-          </p>
-          {auth.error && (
-            <p className="mt-1 flex items-start text-red-400">
-              <span className="mr-2 opacity-50">ERR:</span> 
-              <span>{auth.error}</span>
-            </p>
-          )}
-        </div>
+        {/* GUÍA DE CONFIGURACIÓN - AHORA MÁS VISIBLE */}
+        <div className="mb-8">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <button 
+              onClick={() => setShowSettings(!showSettings)} 
+              className="w-full px-6 py-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors"
+            >
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-tight flex items-center">
+                <svg className="w-4 h-4 mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                Configuración de la API
+              </span>
+              <svg className={`w-4 h-4 text-slate-400 transition-transform ${showSettings ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeWidth="2" /></svg>
+            </button>
 
-        <div className="mb-6">
-          <button 
-            onClick={() => setShowSettings(!showSettings)} 
-            className="w-full flex justify-between items-center px-4 py-2 bg-white rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
-          >
-            <span className="flex items-center uppercase tracking-tight">
-              <svg className="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>
-              Configuración de Credenciales
-            </span>
-            <svg className={`w-3 h-3 transform transition-transform ${showSettings ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
-          </button>
-          
-          {showSettings && (
-            <div className="mt-2 bg-white p-6 rounded-xl shadow-xl border border-blue-100 space-y-4 animate-in slide-in-from-top-2">
-              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 mb-4">
-                <p className="text-[10px] text-yellow-800 font-bold uppercase mb-1">Guía de Configuración:</p>
-                <ol className="text-[10px] text-yellow-700 space-y-1 list-decimal ml-3">
-                  <li>Crea una app en el <a href="https://www.canva.com/developers/" target="_blank" className="underline font-bold">Portal de Desarrolladores</a>.</li>
-                  <li>Agrega esta <b>Redirect URL</b> exacta en Canva:</li>
-                </ol>
-                <div className="mt-2 flex space-x-1">
-                  <code className="bg-white px-2 py-1 rounded text-[9px] font-mono flex-1 truncate border border-yellow-200">{currentRedirectUri}</code>
-                  <button onClick={() => {navigator.clipboard.writeText(currentRedirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000);}} className="text-[9px] bg-yellow-600 text-white px-3 py-1 rounded font-bold hover:bg-yellow-700 transition-colors">{copied ? 'COPIADO' : 'COPIAR'}</button>
+            {showSettings && (
+              <div className="p-6 space-y-6 animate-in slide-in-from-top-2">
+                <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
+                  <h4 className="text-xs font-black text-amber-800 uppercase mb-2">Paso 1: Configurar en Canva</h4>
+                  <p className="text-[11px] text-amber-700 mb-3 leading-relaxed">
+                    Ve a tu app en <a href="https://www.canva.com/developers/" target="_blank" className="underline font-bold">Canva Developers</a> y en <b>Redirect URLs</b> agrega exactamente esta dirección:
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <code className="bg-white border border-amber-200 px-3 py-2 rounded text-[10px] font-mono flex-1 truncate text-amber-900 font-bold">
+                      {currentRedirectUri}
+                    </code>
+                    <button 
+                      onClick={() => {navigator.clipboard.writeText(currentRedirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000);}}
+                      className={`px-3 py-2 rounded text-[10px] font-bold transition-colors ${copied ? 'bg-green-500 text-white' : 'bg-amber-200 text-amber-800 hover:bg-amber-300'}`}
+                    >
+                      {copied ? '¡COPIADO!' : 'COPIAR'}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-[9px] text-yellow-600 mt-2 italic font-medium">* Sin esta URL exacta, Canva rechazará la conexión (Error 403/400).</p>
+
+                <form onSubmit={saveCredentials} className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-700 uppercase">Paso 2: Ingresar Credenciales</h4>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Client ID</label>
+                    <input type="text" value={credentials.clientId} onChange={e => setCredentials({...credentials, clientId: e.target.value.trim()})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Pega tu Client ID" required />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Client Secret</label>
+                    <input type="password" value={credentials.clientSecret} onChange={e => setCredentials({...credentials, clientSecret: e.target.value.trim()})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Pega tu Client Secret" required />
+                  </div>
+                  <button type="submit" className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">
+                    Guardar Cambios
+                  </button>
+                </form>
               </div>
-
-              <form onSubmit={saveCredentials} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Client ID</label>
-                  <input type="text" placeholder="Copia el Client ID aquí" value={credentials.clientId} onChange={e => setCredentials({...credentials, clientId: e.target.value.trim()})} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" required />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Client Secret</label>
-                  <input type="password" placeholder="Copia el Client Secret aquí" value={credentials.clientSecret} onChange={e => setCredentials({...credentials, clientSecret: e.target.value.trim()})} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" required />
-                </div>
-                <button type="submit" className="w-full py-2 bg-blue-600 text-white font-bold rounded-lg text-xs hover:bg-blue-700 transition-colors">Guardar y Reconectar</button>
-              </form>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {auth.isLoading ? (
-          <div className="bg-white p-12 rounded-3xl shadow-xl text-center border border-slate-100">
-            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="font-bold text-slate-600 animate-pulse">Sincronizando con Canva...</p>
+        {/* LOG DE ACTIVIDAD */}
+        <div className="mb-6 bg-slate-900 rounded-2xl p-4 shadow-xl border border-slate-800">
+          <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Actividad del Sistema</span>
+            <span className="flex items-center text-[9px] text-slate-600">
+              <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${serverStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              Proxy: {serverStatus === 'online' ? 'En línea' : 'Desconectado'}
+            </span>
           </div>
-        ) : !auth.isAuthenticated ? (
-          <div className="bg-white p-10 rounded-3xl shadow-2xl text-center border border-slate-100">
-            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" strokeWidth="2" strokeLinecap="round" /></svg>
+          <div className="font-mono text-[11px] space-y-1">
+            <p className="text-indigo-400 flex">
+              <span className="text-slate-600 mr-2">LOG:</span>
+              <span>{debugInfo || 'Listo para operar.'}</span>
+            </p>
+            {auth.error && (
+              <p className="text-red-400 flex animate-pulse">
+                <span className="text-red-900 mr-2">ERR:</span>
+                <span>{auth.error}</span>
+              </p>
+            )}
+          </div>
+        </div>
+
+        {!auth.isAuthenticated ? (
+          <div className="bg-white p-10 rounded-3xl shadow-xl text-center border border-slate-100">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
             </div>
-            <h3 className="text-xl font-black text-slate-800 mb-2">Conexión Requerida</h3>
-            <p className="text-sm text-slate-500 mb-8">Debes autorizar esta aplicación en tu cuenta de Canva para poder inyectar datos en tus plantillas.</p>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">Requiere Vinculación</h3>
+            <p className="text-sm text-slate-500 mb-8">Debes autorizar la aplicación con tu cuenta de Canva para poder editar plantillas.</p>
             <button 
               onClick={() => initiateAuth(credentials)} 
-              disabled={!credentials.clientId || !credentials.clientSecret}
-              className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 transition-all"
+              disabled={!credentials.clientId || auth.isLoading}
+              className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 disabled:opacity-50 transition-all transform active:scale-95 shadow-xl shadow-indigo-100"
             >
-              CONECTAR CON CANVA
+              {auth.isLoading ? 'CONECTANDO...' : 'CONECTAR AHORA'}
             </button>
           </div>
         ) : (
-          <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-center bg-white px-5 py-2.5 rounded-xl shadow-sm border border-slate-100">
-              <span className="text-[10px] font-black text-green-600 flex items-center uppercase tracking-widest">
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                Conectado
-              </span>
-              <button onClick={logout} className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase">Desconectar</button>
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-between items-center bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Sincronizado con Canva</span>
+              </div>
+              <button onClick={logout} className="text-[10px] font-bold text-red-500 hover:bg-red-50 px-2 py-1 rounded-md transition-colors uppercase">Desvincular</button>
             </div>
             
             <CanvaForm onSubmit={handleCanvaSubmit} isLoading={processing} />
             
             {jobStatus?.resultUrl && (
-              <div className="p-4 bg-green-600 rounded-2xl shadow-2xl shadow-green-200 animate-bounce-short">
+              <div className="p-6 bg-green-500 rounded-2xl shadow-xl shadow-green-100 text-center transform transition-all hover:scale-105">
+                <p className="text-[10px] font-bold text-green-100 uppercase mb-2">¡Diseño creado con éxito!</p>
                 <a 
                   href={jobStatus.resultUrl} 
                   target="_blank" 
                   rel="noopener noreferrer" 
-                  className="flex flex-col items-center justify-center text-white space-y-1"
+                  className="inline-flex items-center justify-center px-6 py-3 bg-white text-green-600 font-black rounded-xl shadow-sm hover:shadow-md transition-all"
                 >
-                  <span className="text-[10px] font-black opacity-80 uppercase tracking-tighter">¡Éxito! Diseño Generado</span>
-                  <span className="text-lg font-black">ABRIR EN CANVA →</span>
+                  ABRIR EN CANVA
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 00-2 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                 </a>
               </div>
             )}
           </div>
         )}
 
-        <footer className="mt-12 text-center text-slate-400 text-[10px] font-medium">
-          <p>© 2024 LPP Integra. Integración vía Canva Connect API v1.</p>
+        <footer className="mt-12 text-center">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">© 2024 LPP Integra • Canva Connect v1.1</p>
         </footer>
       </div>
     </div>
