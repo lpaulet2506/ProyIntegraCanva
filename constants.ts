@@ -1,7 +1,8 @@
 
 export const CANVA_CONFIG = {
   get REDIRECT_URI() {
-    return window.location.origin.replace(/\/$/, '');
+    // Ahora usamos una URL dedicada para el callback
+    return window.location.origin.replace(/\/$/, '') + '/callback';
   },
   AUTH_URL: 'https://www.canva.com/api/oauth/authorize',
   TOKEN_URL: 'https://api.canva.com/v1/oauth/token',
