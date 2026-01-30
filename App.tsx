@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { initiateAuth, exchangeToken, runAutofill, checkJobStatus } from './services/canvaService';
 import { AuthState, CanvaData, AutofillResult, CanvaCredentials } from './types';
 import CanvaForm from './components/CanvaForm';
+import { CANVA_CONFIG } from './constants';
 
 const App: React.FC = () => {
   const [credentials, setCredentials] = useState<CanvaCredentials>(() => {
@@ -56,7 +57,7 @@ const App: React.FC = () => {
       
       const handleTokenExchange = async () => {
         setAuth(prev => ({ ...prev, isLoading: true, error: null }));
-        setDebugInfo('Intercambiando código por token (Modo n8n)...');
+        setDebugInfo('Intercambiando código por token (Modo JSON)...');
         try {
           const token = await exchangeToken(code, credentials);
           localStorage.setItem('canva_token', token);
@@ -124,7 +125,8 @@ const App: React.FC = () => {
     setJobStatus(null);
   };
 
-  const currentRedirectUri = window.location.origin.replace(/\/$/, '');
+  // Obtenemos la URL de redirección configurada con el endpoint /callback
+  const currentRedirectUri = CANVA_CONFIG.REDIRECT_URI;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4 font-sans">
@@ -145,7 +147,7 @@ const App: React.FC = () => {
         <div className="mb-6 bg-slate-900 p-4 rounded-xl font-mono text-[10px] text-blue-400 border border-slate-800 shadow-lg">
           <div className="flex justify-between border-b border-slate-800 pb-2 mb-2">
             <span className="text-slate-500 font-bold uppercase tracking-widest">Estado de Integración</span>
-            <span className="text-slate-700">v1.0.2</span>
+            <span className="text-slate-700">v1.1.0</span>
           </div>
           <p className="flex items-start">
             <span className="mr-2 text-slate-600">INF:</span> 
@@ -174,21 +176,27 @@ const App: React.FC = () => {
           {showSettings && (
             <div className="mt-2 bg-white p-6 rounded-xl shadow-xl border border-blue-100 space-y-4 animate-in slide-in-from-top-2">
               <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 mb-4">
-                <p className="text-[10px] text-yellow-800 font-bold uppercase mb-1">Guía Importante (Modo n8n):</p>
+                <p className="text-[10px] text-yellow-800 font-bold uppercase mb-1">Guía de Configuración:</p>
                 <ol className="text-[10px] text-yellow-700 space-y-1 list-decimal ml-3">
-                  <li>Crea una app en <a href="https://www.canva.com/developers/" target="_blank" className="underline">Canva Dev Portal</a>.</li>
-                  <li>Copia el <b>Client ID</b> y <b>Client Secret</b> abajo.</li>
-                  <li>Agrega esta URL exacta en <b>Redirect URLs</b> de Canva:</li>
+                  <li>Crea una app en el <a href="https://www.canva.com/developers/" target="_blank" className="underline font-bold">Portal de Desarrolladores</a>.</li>
+                  <li>Agrega esta <b>Redirect URL</b> exacta en Canva:</li>
                 </ol>
                 <div className="mt-2 flex space-x-1">
-                  <code className="bg-white px-2 py-1 rounded text-[9px] font-mono flex-1 truncate">{currentRedirectUri}</code>
-                  <button onClick={() => {navigator.clipboard.writeText(currentRedirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000);}} className="text-[9px] bg-yellow-200 px-2 py-1 rounded font-bold">{copied ? 'COPIADO' : 'COPIAR'}</button>
+                  <code className="bg-white px-2 py-1 rounded text-[9px] font-mono flex-1 truncate border border-yellow-200">{currentRedirectUri}</code>
+                  <button onClick={() => {navigator.clipboard.writeText(currentRedirectUri); setCopied(true); setTimeout(() => setCopied(false), 2000);}} className="text-[9px] bg-yellow-600 text-white px-3 py-1 rounded font-bold hover:bg-yellow-700 transition-colors">{copied ? 'COPIADO' : 'COPIAR'}</button>
                 </div>
+                <p className="text-[9px] text-yellow-600 mt-2 italic font-medium">* Sin esta URL exacta, Canva rechazará la conexión (Error 403/400).</p>
               </div>
 
               <form onSubmit={saveCredentials} className="space-y-3">
-                <input type="text" placeholder="Client ID" value={credentials.clientId} onChange={e => setCredentials({...credentials, clientId: e.target.value.trim()})} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" required />
-                <input type="password" placeholder="Client Secret" value={credentials.clientSecret} onChange={e => setCredentials({...credentials, clientSecret: e.target.value.trim()})} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" required />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Client ID</label>
+                  <input type="text" placeholder="Copia el Client ID aquí" value={credentials.clientId} onChange={e => setCredentials({...credentials, clientId: e.target.value.trim()})} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Client Secret</label>
+                  <input type="password" placeholder="Copia el Client Secret aquí" value={credentials.clientSecret} onChange={e => setCredentials({...credentials, clientSecret: e.target.value.trim()})} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" required />
+                </div>
                 <button type="submit" className="w-full py-2 bg-blue-600 text-white font-bold rounded-lg text-xs hover:bg-blue-700 transition-colors">Guardar y Reconectar</button>
               </form>
             </div>
