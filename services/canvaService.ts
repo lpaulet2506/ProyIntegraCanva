@@ -2,6 +2,7 @@
 import { CANVA_CONFIG, SCOPES } from '../constants';
 import { CanvaData, AutofillResult, CanvaCredentials } from '../types';
 
+// Generador de verifier compatible con n8n/Standard PKCE
 const generateRandomString = (length: number) => {
   const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
   let text = '';
@@ -11,17 +12,23 @@ const generateRandomString = (length: number) => {
   return text;
 };
 
+// Codificación Base64URL segura para PKCE
+const base64UrlEncode = (arrayBuffer: ArrayBuffer) => {
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+};
+
 const sha256 = async (plain: string) => {
   const encoder = new TextEncoder();
   const data = encoder.encode(plain);
   return window.crypto.subtle.digest('SHA-256', data);
-};
-
-const base64urlencode = (a: ArrayBuffer) => {
-  return btoa(String.fromCharCode.apply(null, new Uint8Array(a) as any))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
 };
 
 export const initiateAuth = async (credentials: CanvaCredentials) => {
@@ -31,7 +38,7 @@ export const initiateAuth = async (credentials: CanvaCredentials) => {
   localStorage.setItem('canva_code_verifier', codeVerifier);
 
   const hashed = await sha256(codeVerifier);
-  const codeChallenge = base64urlencode(hashed);
+  const codeChallenge = base64UrlEncode(hashed);
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -43,6 +50,7 @@ export const initiateAuth = async (credentials: CanvaCredentials) => {
     state: Math.random().toString(36).substring(7),
   });
 
+  // El usuario va a WWW para autenticarse
   window.location.href = `${CANVA_CONFIG.AUTH_URL}?${params.toString()}`;
 };
 
@@ -50,6 +58,7 @@ export const exchangeToken = async (code: string, credentials: CanvaCredentials)
   const codeVerifier = localStorage.getItem('canva_code_verifier');
   if (!codeVerifier) throw new Error('No se encontró el PKCE (code_verifier).');
 
+  // El intercambio se hace a través de nuestro proxy para usar el Secret de forma segura
   const targetUrl = `${window.location.origin}/api/canva-token`;
 
   try {
@@ -65,28 +74,22 @@ export const exchangeToken = async (code: string, credentials: CanvaCredentials)
       }),
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      let errorInfo;
-      try {
-        errorInfo = await response.json();
-      } catch (e) {
-        throw new Error(`Error ${response.status}: El servidor no respondió con JSON.`);
-      }
-      // Limpiamos el verifier solo si no es un error de parámetros
-      localStorage.removeItem('canva_code_verifier');
-      throw new Error(errorInfo.message || errorInfo.error || `Error ${response.status}`);
+      throw new Error(data.message || data.error || `Error ${response.status}`);
     }
 
     localStorage.removeItem('canva_code_verifier');
-    const data = await response.json();
     return data.access_token;
   } catch (err: any) {
-    console.error("Error en intercambio:", err);
+    console.error("Error en intercambio de token:", err);
     throw err;
   }
 };
 
 export const runAutofill = async (token: string, data: CanvaData): Promise<AutofillResult> => {
+  // Las llamadas a la API usan el dominio API.
   const response = await fetch(CANVA_CONFIG.AUTOFILL_URL, {
     method: 'POST',
     headers: {

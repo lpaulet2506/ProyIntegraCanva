@@ -1,7 +1,6 @@
 
 export const CANVA_CONFIG = {
   get REDIRECT_URI() {
-    // Aseguramos que no haya barra diagonal al final
     return window.location.origin.replace(/\/$/, '');
   },
   AUTH_URL: 'https://www.canva.com/api/oauth/authorize',
